@@ -43,7 +43,7 @@ const AIHelper = () => {
     }
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiApiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -62,14 +62,31 @@ const AIHelper = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Erro na API do Gemini');
+        const errorData = await response.text();
+        console.error('Erro da API Gemini:', response.status, errorData);
+        
+        if (response.status === 400) {
+          return "Chave API inválida ou problema na requisição. Verifique sua chave API do Google Gemini.";
+        } else if (response.status === 403) {
+          return "Acesso negado. Verifique se sua chave API do Google Gemini está correta e ativa.";
+        } else if (response.status === 429) {
+          return "Muitas requisições. Aguarde um momento antes de tentar novamente.";
+        }
+        
+        throw new Error(`Erro na API do Gemini: ${response.status}`);
       }
 
       const data = await response.json();
+      
+      if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+        console.error('Resposta inesperada da API:', data);
+        return "Não consegui gerar uma resposta. Tente reformular sua pergunta.";
+      }
+      
       return data.candidates[0].content.parts[0].text;
     } catch (error) {
       console.error('Erro ao comunicar com Gemini:', error);
-      return "Desculpe, não consegui processar sua pergunta no momento. Tente novamente em alguns instantes.";
+      return "Erro de conexão com a IA. Verifique sua internet e tente novamente.";
     }
   };
 
