@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, ReactNode, FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,87 +10,50 @@ import { LogIn, UserPlus, Loader2 } from 'lucide-react';
 import PricingPage from '@/pages/Pricing';
 
 interface AuthWrapperProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | null;
+
+const VerifyingPayment = () => (
+  <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
+    <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+    <h1 className="text-2xl font-bold text-gray-800">Verificando seu pagamento...</h1>
+    <p className="text-lg text-gray-600 mt-2">Isso pode levar alguns segundos. Por favor, não feche esta página.</p>
+  </div>
+);
 
 const AuthWrapper = ({ children }: AuthWrapperProps) => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>(null);
-
+  const [searchParams] = useSearchParams();
+  const paymentSuccess = searchParams.get('payment_success');
+  const [isVerifying, setIsVerifying] = useState(!!paymentSuccess);
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const { toast } = useToast();
-  
-  // MODIFICADO: A função agora cria um perfil se ele não existir
-  const checkSubscription = useCallback(async (userId: string) => {
-    // 1. Tenta buscar o perfil
-    let { data, error } = await supabase
-      .from('profiles')
-      .select('subscription_status')
-      .eq('id', userId)
-      .single();
 
-    // 2. Se não encontrou o perfil (erro PGRST116), cria um novo
-    if (error && error.code === 'PGRST116') {
-      console.log("Perfil não encontrado, criando um novo...");
-      const { data: newProfile, error: insertError } = await supabase
-        .from('profiles')
-        .insert({ id: userId });
-
-      if (insertError) {
-        console.error("Erro ao criar novo perfil:", insertError);
-        setLoading(false);
-        return;
-      }
-      
-      // Se a criação foi bem-sucedida, 'data' agora é o novo perfil (com status nulo)
-      if (newProfile) {
-        data = newProfile[0];
-      }
-    } else if (error) {
-      // Se for outro tipo de erro, exibe no console
-      console.error("Erro ao buscar perfil:", error);
-      setLoading(false);
-      return;
-    }
-
-    // 3. Define o status da assinatura
-    setSubscriptionStatus(data?.subscription_status || null);
-    setLoading(false);
-  }, []);
-
-
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        const currentUser = session?.user;
-        setUser(currentUser ?? null);
-        
-        if (currentUser) {
-          checkSubscription(currentUser.id);
-        } else {
-          setSubscriptionStatus(null);
-          setLoading(false);
-        }
-      }
-    );
-    return () => subscription.unsubscribe();
-  }, [checkSubscription]);
-
-
-  const handleAuth = async (e: React.FormEvent) => {
+  // ------------ INÍCIO DA MUDANÇA ------------
+  // Refatorando a função para ser mais direta.
+  const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
     setIsAuthenticating(true);
-    const authMethod = isSignUp ? supabase.auth.signUp : supabase.auth.signInWithPassword;
-    
+
     try {
-      const { error } = await authMethod({ email, password });
+      let error;
+      if (isSignUp) {
+        // Chamada direta para signUp
+        ({ error } = await supabase.auth.signUp({ email, password }));
+      } else {
+        // Chamada direta para signInWithPassword
+        ({ error } = await supabase.auth.signInWithPassword({ email, password }));
+      }
+
       if (error) throw error;
+
       toast({
         title: isSignUp ? "Conta criada!" : "Login realizado!",
         description: isSignUp ? "Verifique seu email para confirmar a conta." : "Bem-vindo de volta!",
@@ -104,17 +68,71 @@ const AuthWrapper = ({ children }: AuthWrapperProps) => {
       setIsAuthenticating(false);
     }
   };
+  // ------------ FIM DA MUDANÇA ------------
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-  };
-  
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
+  const checkSubscription = useCallback(async (userId: string) => {
+    let { data, error } = await supabase
+      .from('profiles')
+      .select('subscription_status')
+      .eq('id', userId)
+      .single();
+
+    if (error && error.code === 'PGRST116') {
+      const { error: insertError } = await supabase
+        .from('profiles')
+        .insert({ id: userId });
+
+      if (insertError) {
+        console.error("Erro ao criar novo perfil:", insertError);
+        return;
+      }
+    } else if (error) {
+      console.error("Erro ao buscar perfil:", error);
+      return;
+    }
+
+    const currentStatus = data?.subscription_status || null;
+    setSubscriptionStatus(currentStatus);
+
+    if (currentStatus === 'active') {
+        setIsVerifying(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        const currentUser = session?.user;
+        setUser(currentUser ?? null);
+        setLoading(true);
+        if (currentUser) {
+          checkSubscription(currentUser.id).finally(() => setLoading(false));
+        } else {
+          setSubscriptionStatus(null);
+          setLoading(false);
+        }
+      }
     );
+    return () => subscription.unsubscribe();
+  }, [checkSubscription]);
+
+  useEffect(() => {
+    if (isVerifying && user) {
+      const interval = setInterval(() => {
+        checkSubscription(user.id);
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [isVerifying, user, checkSubscription]);
+
+  // ... (Restante do componente sem alterações) ...
+
+  if (loading) {
+    return <div className="min-h-screen bg-gray-100 flex items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
+  }
+
+  if (isVerifying) {
+    return <VerifyingPayment />;
   }
 
   if (!user) {
@@ -162,7 +180,7 @@ const AuthWrapper = ({ children }: AuthWrapperProps) => {
           <h1 className="text-xl font-semibold text-gray-900">Processador NFe</h1>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-600">{user.email}</span>
-            <Button variant="outline" size="sm" onClick={handleSignOut}>Sair</Button>
+            <Button variant="outline" size="sm" onClick={() => supabase.auth.signOut()}>Sair</Button>
           </div>
         </div>
       </header>

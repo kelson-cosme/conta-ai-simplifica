@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
-import { Stripe } from 'stripe'
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import Stripe from "https://esm.sh/stripe@13.11.0?target=deno&deno-std=0.132.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +11,9 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, {
   httpClient: Stripe.createFetchHttpClient(),
 })
 
-const YOUR_DOMAIN = 'http://localhost:8080';
+// MODIFICADO: A URL do seu site em produção. 
+// Pode ser uma variável de ambiente para mais segurança.
+const YOUR_DOMAIN = Deno.env.get('SITE_URL') || 'http://localhost:8080';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -19,7 +21,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // CORREÇÃO: Usando os nomes corretos das variáveis de ambiente do Supabase
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
@@ -28,9 +29,9 @@ Deno.serve(async (req) => {
         auth: { persistSession: false }
       }
     )
-    
+
     const { data: { user } } = await supabaseAdmin.auth.getUser()
-    if (!user) throw new Error('User not found')
+    if (!user) throw new Error('Usuário não encontrado')
 
     let { data: profile } = await supabaseAdmin
       .from('profiles')
@@ -42,11 +43,11 @@ Deno.serve(async (req) => {
 
     if (!customerId) {
       const customer = await stripe.customers.create({
-        email: user.email,
+        email: user.email!, // Adicionado '!' para garantir que o email existe
         metadata: { supabase_id: user.id },
       })
       customerId = customer.id
-      
+
       await supabaseAdmin
         .from('profiles')
         .update({ stripe_customer_id: customerId })
@@ -59,18 +60,20 @@ Deno.serve(async (req) => {
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
       mode: 'subscription',
-      success_url: `${YOUR_DOMAIN}/`,
+      success_url: `${YOUR_DOMAIN}/?payment_success=true`,
       cancel_url: `${YOUR_DOMAIN}/`,
+        client_reference_id: user.id, 
+
     })
 
     if (!session.url) {
-        throw new Error("Stripe session URL not found.")
+        throw new Error("Não foi possível criar a sessão de checkout do Stripe.")
     }
 
-    return new Response(JSON.stringify({ sessionId: session.id, url: session.url }), {
+    return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error(error)
     return new Response(JSON.stringify({ error: error.message }), {
       status: 400,
