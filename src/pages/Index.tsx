@@ -1,17 +1,15 @@
-import Header from '@/components/Header';
 import DashboardStats from '@/components/DashboardStats';
 import UploadArea from '@/components/UploadArea';
 import AIHelper from '@/components/AIHelper';
 import { ReportsSection } from "@/components/ReportsSection";
-import { InvoiceProcessor } from "@/components/InvoiceProcessor";
+import AdvancedNFEProcessor from "@/components/AdvancedNFEProcessor";
+import AuthWrapper from "@/components/AuthWrapper";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      
-      <main className="container mx-auto px-4 py-8">
+    <AuthWrapper>
+      <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-foreground mb-2">
             Dashboard ContábilFácil
@@ -62,7 +60,7 @@ const Index = () => {
             </TabsContent>
             
             <TabsContent value="invoices">
-              <InvoiceProcessor />
+              <AdvancedNFEProcessor />
             </TabsContent>
             
             <TabsContent value="reports">
@@ -76,8 +74,8 @@ const Index = () => {
             </TabsContent>
           </Tabs>
         </div>
-      </main>
-    </div>
+      </div>
+    </AuthWrapper>
   );
 };
 

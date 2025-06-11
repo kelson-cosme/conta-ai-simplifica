@@ -9,7 +9,66 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      nfe_data: {
+        Row: {
+          chave_acesso: string
+          created_at: string
+          data_emissao: string
+          destinatario: Json
+          emitente: Json
+          id: string
+          numero: string
+          observacoes: string | null
+          produtos: Json
+          protocolo: string | null
+          serie: string
+          status: string
+          tipo: string
+          totais: Json
+          transportadora: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          chave_acesso: string
+          created_at?: string
+          data_emissao: string
+          destinatario: Json
+          emitente: Json
+          id?: string
+          numero: string
+          observacoes?: string | null
+          produtos: Json
+          protocolo?: string | null
+          serie: string
+          status: string
+          tipo: string
+          totais: Json
+          transportadora?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          chave_acesso?: string
+          created_at?: string
+          data_emissao?: string
+          destinatario?: Json
+          emitente?: Json
+          id?: string
+          numero?: string
+          observacoes?: string | null
+          produtos?: Json
+          protocolo?: string | null
+          serie?: string
+          status?: string
+          tipo?: string
+          totais?: Json
+          transportadora?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

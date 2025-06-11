@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Upload, FileText, CheckCircle, AlertTriangle, Eye, Download, Search } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertTriangle, Eye, Download, Search, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,9 +9,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { NFEData, NFEParser } from '@/lib/nfe-parser';
+import { useNFEData } from '@/hooks/useNFEData';
+import { supabase } from '@/integrations/supabase/client';
 
 const AdvancedNFEProcessor = () => {
-  const [processedNFEs, setProcessedNFEs] = useState<NFEData[]>([]);
+  const { nfeList, isLoading, saveNFE, deleteNFE } = useNFEData();
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedNFE, setSelectedNFE] = useState<NFEData | null>(null);
@@ -21,6 +23,17 @@ const AdvancedNFEProcessor = () => {
     setIsProcessing(true);
 
     try {
+      // Verificar se o usuário está autenticado
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Autenticação Necessária",
+          description: "Você precisa estar logado para processar NF-e.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       let nfeData: NFEData;
 
       if (file.name.toLowerCase().endsWith('.xml')) {
@@ -53,7 +66,8 @@ const AdvancedNFEProcessor = () => {
         });
       }
 
-      setProcessedNFEs(prev => [nfeData, ...prev]);
+      // Salvar no Supabase
+      await saveNFE(nfeData);
 
     } catch (error) {
       toast({
@@ -85,15 +99,15 @@ const AdvancedNFEProcessor = () => {
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
-  const filteredNFEs = processedNFEs.filter(nfe =>
+  const filteredNFEs = nfeList.filter(nfe =>
     nfe.numero.includes(searchTerm) ||
     nfe.emitente.razaoSocial.toLowerCase().includes(searchTerm.toLowerCase()) ||
     nfe.chaveAcesso.includes(searchTerm)
   );
 
-  const totalNFEs = processedNFEs.length;
-  const totalValue = processedNFEs.reduce((sum, nfe) => sum + nfe.totais.valorNota, 0);
-  const validatedNFEs = processedNFEs.filter(nfe => nfe.status === 'validada').length;
+  const totalNFEs = nfeList.length;
+  const totalValue = nfeList.reduce((sum, nfe) => sum + nfe.totais.valorNota, 0);
+  const validatedNFEs = nfeList.filter(nfe => nfe.status === 'validada').length;
 
   return (
     <div className="space-y-6">
@@ -178,7 +192,7 @@ const AdvancedNFEProcessor = () => {
       </div>
 
       {/* Lista de NF-e Processadas */}
-      {processedNFEs.length > 0 && (
+      {!isLoading && nfeList.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>NF-e Processadas</CardTitle>
@@ -370,6 +384,15 @@ const AdvancedNFEProcessor = () => {
                         <Button variant="outline" size="sm">
                           <Download className="h-4 w-4" />
                         </Button>
+                        
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => deleteNFE(nfe.id)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -380,7 +403,7 @@ const AdvancedNFEProcessor = () => {
         </Card>
       )}
 
-      {processedNFEs.length === 0 && (
+      {!isLoading && nfeList.length === 0 && (
         <Card>
           <CardContent className="p-12 text-center">
             <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
