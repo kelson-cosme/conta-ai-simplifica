@@ -1,36 +1,66 @@
 import { TrendingUp, TrendingDown, FileText, DollarSign } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { NFEParser } from '@/lib/nfe-parser';
 
-const DashboardStats = () => {
-  // Dados fictícios para demonstração
+interface DashboardStatsProps {
+  isLoading: boolean;
+  totalNotas: number;
+  receitaTotal: number;
+  despesasTotais: number;
+  impostosTotais: number;
+}
+
+const DashboardStats = ({ 
+  isLoading, 
+  totalNotas = 0, 
+  receitaTotal = 0, 
+  despesasTotais = 0, 
+  impostosTotais = 0 
+}: DashboardStatsProps) => {
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array(4).fill(0).map((_, index) => (
+          <Card key={index}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <Skeleton className="h-4 w-2/4" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-7 w-3/4 mb-2" />
+              <Skeleton className="h-3 w-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
   const stats = [
     {
       title: "Notas Fiscais",
-      value: "12",
-      description: "Este mês",
-      icon: FileText,
-      trend: "+2 em relação ao mês anterior"
+      value: totalNotas.toString(),
+      description: "Total processado",
+      icon: FileText
     },
     {
-      title: "Receita Total",
-      value: "R$ 8.547,20",
-      description: "Março 2024",
-      icon: TrendingUp,
-      trend: "+12.5% em relação ao mês anterior"
+      title: "Receita Total (Saídas)",
+      value: NFEParser.formatCurrency(receitaTotal),
+      description: "Valor total das notas de saída",
+      icon: TrendingUp
     },
     {
-      title: "Despesas",
-      value: "R$ 3.241,50",
-      description: "Março 2024", 
-      icon: TrendingDown,
-      trend: "-5.2% em relação ao mês anterior"
+      title: "Despesas (Entradas)",
+      value: NFEParser.formatCurrency(despesasTotais),
+      description: "Valor total das notas de entrada", 
+      icon: TrendingDown
     },
     {
       title: "Impostos Devidos",
-      value: "R$ 1.287,44",
-      description: "Estimativa para abril",
-      icon: DollarSign,
-      trend: "Baseado nas notas processadas"
+      value: NFEParser.formatCurrency(impostosTotais),
+      description: "Soma dos impostos das notas",
+      icon: DollarSign
     }
   ];
 
@@ -50,9 +80,6 @@ const DashboardStats = () => {
               <div className="text-2xl font-bold">{stat.value}</div>
               <p className="text-xs text-muted-foreground">
                 {stat.description}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {stat.trend}
               </p>
             </CardContent>
           </Card>

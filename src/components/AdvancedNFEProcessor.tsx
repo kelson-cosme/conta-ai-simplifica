@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Upload, FileText, CheckCircle, AlertTriangle, Eye, Download, Search, Trash2 } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertTriangle, Eye, Download, Search, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,8 +12,10 @@ import { NFEData, NFEParser } from '@/lib/nfe-parser';
 import { useNFEData } from '@/hooks/useNFEData';
 import { supabase } from '@/integrations/supabase/client';
 
+const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
 const AdvancedNFEProcessor = () => {
-  const { nfeList, isLoading, saveNFE, deleteNFE } = useNFEData();
+  const { nfeList, isLoading, saveNFE, deleteNFE, refreshNFEs } = useNFEData();
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedNFE, setSelectedNFE] = useState<NFEData | null>(null);
@@ -21,69 +23,42 @@ const AdvancedNFEProcessor = () => {
 
   const processFile = async (file: File) => {
     setIsProcessing(true);
-
     try {
-      // Verificar se o usuário está autenticado
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        toast({
-          title: "Autenticação Necessária",
-          description: "Você precisa estar logado para processar NF-e.",
-          variant: "destructive",
-        });
+        toast({ title: "Autenticação Necessária", description: "Você precisa estar logado.", variant: "destructive" });
         return;
       }
+      if (!geminiApiKey) throw new Error("Chave da API do Gemini não configurada.");
 
       let nfeData: NFEData;
-
+      
       if (file.name.toLowerCase().endsWith('.xml')) {
         const content = await file.text();
-        nfeData = NFEParser.parseXML(content);
-        
-        toast({
-          title: "XML Processado",
-          description: `NF-e ${nfeData.numero} processada com sucesso`,
-        });
+        nfeData = await NFEParser.parseXML(content, geminiApiKey);
       } else if (file.name.toLowerCase().endsWith('.pdf')) {
-        nfeData = await NFEParser.processPDF(file);
-        
-        toast({
-          title: "PDF Processado",
-          description: `NF-e ${nfeData.numero} extraída do PDF via OCR`,
-        });
+        nfeData = await NFEParser.processPDF(file, geminiApiKey);
       } else {
         throw new Error('Formato de arquivo não suportado');
       }
 
-      // Validar NF-e
       const validation = NFEParser.validateNFE(nfeData);
-      if (!validation.valid) {
-        nfeData.status = 'erro';
-        toast({
-          title: "Problemas na Validação",
-          description: validation.errors.join(', '),
-          variant: "destructive",
-        });
-      }
-
-      // Salvar no Supabase
+      nfeData.status = validation.valid ? 'validada' : 'erro';
+      
       await saveNFE(nfeData);
 
     } catch (error) {
-      toast({
-        title: "Erro no Processamento",
-        description: error instanceof Error ? error.message : "Erro desconhecido",
-        variant: "destructive",
-      });
+      toast({ title: "Erro no Processamento", description: error instanceof Error ? error.message : "Erro desconhecido", variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
-      Array.from(files).forEach(processFile);
+      await Promise.all(Array.from(files).map(processFile));
+      refreshNFEs();
     }
   };
 
@@ -94,8 +69,7 @@ const AdvancedNFEProcessor = () => {
       cancelada: { variant: 'destructive' as const, label: 'Cancelada' },
       erro: { variant: 'destructive' as const, label: 'Erro' }
     };
-
-    const config = statusConfig[status];
+    const config = statusConfig[status] || { variant: 'outline', label: 'Desconhecido' };
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
@@ -104,53 +78,30 @@ const AdvancedNFEProcessor = () => {
     nfe.emitente.razaoSocial.toLowerCase().includes(searchTerm.toLowerCase()) ||
     nfe.chaveAcesso.includes(searchTerm)
   );
-
+  
   const totalNFEs = nfeList.length;
-  const totalValue = nfeList.reduce((sum, nfe) => sum + nfe.totais.valorNota, 0);
+  const totalValue = nfeList.reduce((sum, nfe) => sum + (nfe.totais?.valorNota || 0), 0);
   const validatedNFEs = nfeList.filter(nfe => nfe.status === 'validada').length;
 
   return (
     <div className="space-y-6">
-      {/* Upload Area */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Processamento Avançado de NF-e
-          </CardTitle>
-          <CardDescription>
-            Upload de arquivos XML ou PDF para extração automática de dados
-          </CardDescription>
+          <CardTitle className="flex items-center gap-2"><FileText />Processamento Avançado de NF-e</CardTitle>
+          <CardDescription>Upload de arquivos XML ou PDF para extração via IA</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
-            <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-semibold mb-2">Selecione seus arquivos de NF-e</h3>
-            <p className="text-muted-foreground mb-4">
-              Processamento automático com extração de dados e validação
-            </p>
-            
-            <input
-              type="file"
-              multiple
-              accept=".xml,.pdf"
-              onChange={handleFileSelect}
-              className="hidden"
-              id="nfe-upload"
-              disabled={isProcessing}
-            />
-            
+            <input type="file" multiple accept=".xml,.pdf" onChange={handleFileSelect} className="hidden" id="nfe-upload-advanced" disabled={isProcessing}/>
             <Button asChild disabled={isProcessing}>
-              <label htmlFor="nfe-upload" className="cursor-pointer">
-                <Upload className="h-4 w-4 mr-2" />
-                {isProcessing ? 'Processando...' : 'Selecionar Arquivos'}
+              <label htmlFor="nfe-upload-advanced" className="cursor-pointer">
+                {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando...</> : <><Upload className="h-4 w-4 mr-2" />Selecionar Arquivos</>}
               </label>
             </Button>
           </div>
         </CardContent>
       </Card>
-
-      {/* Estatísticas */}
+      
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-6">
@@ -191,7 +142,6 @@ const AdvancedNFEProcessor = () => {
         </Card>
       </div>
 
-      {/* Lista de NF-e Processadas */}
       {!isLoading && nfeList.length > 0 && (
         <Card>
           <CardHeader>
@@ -240,7 +190,8 @@ const AdvancedNFEProcessor = () => {
                           <DialogTrigger asChild>
                             <Button
                               variant="outline"
-                              size="sm"
+                              size="icon"
+                              className='h-8 w-8'
                               onClick={() => setSelectedNFE(nfe)}
                             >
                               <Eye className="h-4 w-4" />
@@ -256,37 +207,25 @@ const AdvancedNFEProcessor = () => {
                             
                             {selectedNFE && (
                               <Tabs defaultValue="geral" className="w-full">
-                                <TabsList className="grid w-full grid-cols-4">
+                                <TabsList className="grid w-full grid-cols-3">
                                   <TabsTrigger value="geral">Geral</TabsTrigger>
                                   <TabsTrigger value="produtos">Produtos</TabsTrigger>
                                   <TabsTrigger value="impostos">Impostos</TabsTrigger>
-                                  <TabsTrigger value="validacao">Validação</TabsTrigger>
                                 </TabsList>
                                 
-                                <TabsContent value="geral" className="space-y-4">
-                                  <div className="grid grid-cols-2 gap-4">
+                                <TabsContent value="geral" className="space-y-4 pt-4">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
-                                      <h4 className="font-semibold mb-2">Emitente</h4>
-                                      <p>{selectedNFE.emitente.razaoSocial}</p>
-                                      <p>{NFEParser.formatCNPJ(selectedNFE.emitente.cnpj)}</p>
-                                      <p>{selectedNFE.emitente.endereco}</p>
-                                      <p>{selectedNFE.emitente.municipio}/{selectedNFE.emitente.uf}</p>
+                                      <h4 className="font-semibold mb-2 border-b pb-1">Emitente</h4>
+                                      <p><strong>Razão Social:</strong> {selectedNFE.emitente.razaoSocial}</p>
+                                      <p><strong>CNPJ:</strong> {NFEParser.formatCNPJ(selectedNFE.emitente.cnpj)}</p>
+                                      <p><strong>Endereço:</strong> {selectedNFE.emitente.endereco}, {selectedNFE.emitente.municipio}-{selectedNFE.emitente.uf}</p>
                                     </div>
                                     <div>
-                                      <h4 className="font-semibold mb-2">Destinatário</h4>
-                                      <p>{selectedNFE.destinatario.razaoSocial}</p>
-                                      <p>{selectedNFE.destinatario.cnpj && NFEParser.formatCNPJ(selectedNFE.destinatario.cnpj)}</p>
-                                      <p>{selectedNFE.destinatario.endereco}</p>
-                                      <p>{selectedNFE.destinatario.municipio}/{selectedNFE.destinatario.uf}</p>
-                                    </div>
-                                  </div>
-                                  
-                                  <div>
-                                    <h4 className="font-semibold mb-2">Informações da Nota</h4>
-                                    <div className="grid grid-cols-3 gap-4">
-                                      <p><strong>Chave:</strong> {selectedNFE.chaveAcesso}</p>
-                                      <p><strong>Protocolo:</strong> {selectedNFE.protocolo}</p>
-                                      <p><strong>Data:</strong> {new Date(selectedNFE.dataEmissao).toLocaleDateString('pt-BR')}</p>
+                                      <h4 className="font-semibold mb-2 border-b pb-1">Destinatário</h4>
+                                      <p><strong>Razão Social:</strong> {selectedNFE.destinatario.razaoSocial}</p>
+                                      <p><strong>CNPJ/CPF:</strong> {selectedNFE.destinatario.cnpj ? NFEParser.formatCNPJ(selectedNFE.destinatario.cnpj) : selectedNFE.destinatario.cpf}</p>
+                                      <p><strong>Endereço:</strong> {selectedNFE.destinatario.endereco}, {selectedNFE.destinatario.municipio}-{selectedNFE.destinatario.uf}</p>
                                     </div>
                                   </div>
                                 </TabsContent>
@@ -295,7 +234,6 @@ const AdvancedNFEProcessor = () => {
                                   <Table>
                                     <TableHeader>
                                       <TableRow>
-                                        <TableHead>Código</TableHead>
                                         <TableHead>Descrição</TableHead>
                                         <TableHead>Qtd</TableHead>
                                         <TableHead>Valor Unit.</TableHead>
@@ -305,7 +243,6 @@ const AdvancedNFEProcessor = () => {
                                     <TableBody>
                                       {selectedNFE.produtos.map((produto, index) => (
                                         <TableRow key={index}>
-                                          <TableCell>{produto.codigo}</TableCell>
                                           <TableCell>{produto.descricao}</TableCell>
                                           <TableCell>{produto.quantidade} {produto.unidade}</TableCell>
                                           <TableCell>{NFEParser.formatCurrency(produto.valorUnitario)}</TableCell>
@@ -316,80 +253,31 @@ const AdvancedNFEProcessor = () => {
                                   </Table>
                                 </TabsContent>
                                 
-                                <TabsContent value="impostos">
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                      <h4 className="font-semibold mb-2">Resumo de Impostos</h4>
-                                      <div className="space-y-2">
-                                        <p>ICMS: {NFEParser.formatCurrency(selectedNFE.totais.valorIcms)}</p>
-                                        <p>IPI: {NFEParser.formatCurrency(selectedNFE.totais.valorIpi)}</p>
-                                        <p>PIS: {NFEParser.formatCurrency(selectedNFE.totais.valorPis)}</p>
-                                        <p>COFINS: {NFEParser.formatCurrency(selectedNFE.totais.valorCofins)}</p>
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <h4 className="font-semibold mb-2">Totais</h4>
-                                      <div className="space-y-2">
-                                        <p>Produtos: {NFEParser.formatCurrency(selectedNFE.totais.valorProdutos)}</p>
-                                        <p>Frete: {NFEParser.formatCurrency(selectedNFE.totais.valorFrete)}</p>
-                                        <p>Desconto: {NFEParser.formatCurrency(selectedNFE.totais.valorDesconto)}</p>
-                                        <p className="font-bold">Total: {NFEParser.formatCurrency(selectedNFE.totais.valorNota)}</p>
-                                      </div>
-                                    </div>
+                                <TabsContent value="impostos" className="pt-4">
+                                  <h4 className="font-semibold mb-2">Totais e Impostos</h4>
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                      <div className="p-3 bg-slate-100 rounded-md"><p className="text-xs text-slate-600">Valor dos Produtos</p><p className="font-bold">{NFEParser.formatCurrency(selectedNFE.totais.valorProdutos)}</p></div>
+                                      <div className="p-3 bg-slate-100 rounded-md"><p className="text-xs text-slate-600">Desconto</p><p className="font-bold">{NFEParser.formatCurrency(selectedNFE.totais.valorDesconto)}</p></div>
+                                      <div className="p-3 bg-slate-100 rounded-md"><p className="text-xs text-slate-600">ICMS</p><p className="font-bold">{NFEParser.formatCurrency(selectedNFE.totais.valorIcms)}</p></div>
+                                      <div className="p-3 bg-slate-100 rounded-md"><p className="text-xs text-slate-600">IPI</p><p className="font-bold">{NFEParser.formatCurrency(selectedNFE.totais.valorIpi)}</p></div>
+                                      <div className="p-3 bg-blue-100 rounded-md col-span-2 md:col-span-4"><p className="text-sm text-blue-800">Valor Total da Nota</p><p className="text-xl font-bold text-blue-800">{NFEParser.formatCurrency(selectedNFE.totais.valorNota)}</p></div>
                                   </div>
                                 </TabsContent>
                                 
-                                <TabsContent value="validacao">
-                                  <div className="space-y-4">
-                                    {(() => {
-                                      const validation = NFEParser.validateNFE(selectedNFE);
-                                      return (
-                                        <div>
-                                          <div className="flex items-center gap-2 mb-4">
-                                            {validation.valid ? (
-                                              <CheckCircle className="h-5 w-5 text-green-600" />
-                                            ) : (
-                                              <AlertTriangle className="h-5 w-5 text-destructive" />
-                                            )}
-                                            <span className="font-semibold">
-                                              {validation.valid ? 'NF-e Válida' : 'Problemas Encontrados'}
-                                            </span>
-                                          </div>
-                                          
-                                          {!validation.valid && (
-                                            <div className="space-y-2">
-                                              <h4 className="font-semibold text-destructive">Erros:</h4>
-                                              {validation.errors.map((error, index) => (
-                                                <p key={index} className="text-sm text-destructive">• {error}</p>
-                                              ))}
-                                            </div>
-                                          )}
-                                          
-                                          {selectedNFE.observacoes && (
-                                            <div>
-                                              <h4 className="font-semibold mb-2">Observações:</h4>
-                                              <p className="text-sm">{selectedNFE.observacoes}</p>
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })()}
-                                  </div>
-                                </TabsContent>
                               </Tabs>
                             )}
                           </DialogContent>
                         </Dialog>
                         
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="icon" className='h-8 w-8'>
                           <Download className="h-4 w-4" />
                         </Button>
                         
                         <Button 
                           variant="outline" 
-                          size="sm"
+                          size="icon"
+                          className='h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive'
                           onClick={() => deleteNFE(nfe.id)}
-                          className="text-destructive hover:text-destructive"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -403,17 +291,6 @@ const AdvancedNFEProcessor = () => {
         </Card>
       )}
 
-      {!isLoading && nfeList.length === 0 && (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-semibold mb-2">Nenhuma NF-e processada</h3>
-            <p className="text-muted-foreground">
-              Faça upload de arquivos XML ou PDF para começar o processamento automático
-            </p>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };

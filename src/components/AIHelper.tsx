@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Message {
@@ -13,20 +13,43 @@ interface Message {
   timestamp: Date;
 }
 
+// ADICIONADO: Lendo a chave da API diretamente das variáveis de ambiente
+const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
 const AIHelper = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: 'Olá! Sou seu assistente contábil. Posso te ajudar a entender impostos, regimes tributários e analisar suas notas fiscais. Como posso ajudar?',
-      sender: 'ai',
-      timestamp: new Date()
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [geminiApiKey, setGeminiApiKey] = useState('');
-  const [showApiInput, setShowApiInput] = useState(true);
   const { toast } = useToast();
+
+  // ADICIONADO: Efeito para verificar a chave da API na inicialização
+  useEffect(() => {
+    if (!geminiApiKey) {
+      setMessages([
+        {
+          id: '1',
+          text: 'Olá! Para usar o Assistente IA, a chave da API do Google Gemini precisa ser configurada no seu arquivo .env.local. Por favor, peça ajuda ao desenvolvedor.',
+          sender: 'ai',
+          timestamp: new Date()
+        }
+      ]);
+      toast({
+        title: "Configuração Pendente",
+        description: "A chave da API do Gemini não foi encontrada.",
+        variant: "destructive",
+      });
+    } else {
+      setMessages([
+        {
+          id: '1',
+          text: 'Olá! Sou seu assistente contábil. Posso te ajudar a entender impostos, regimes tributários e analisar suas notas fiscais. Como posso ajudar?',
+          sender: 'ai',
+          timestamp: new Date()
+        }
+      ]);
+    }
+  }, []);
+
 
   const commonQuestions = [
     "O que é ICMS e como é calculado?",
@@ -38,8 +61,9 @@ const AIHelper = () => {
   ];
 
   const getAIResponse = async (userMessage: string): Promise<string> => {
+    // A verificação da chave agora é feita no início
     if (!geminiApiKey) {
-      return "Por favor, configure sua chave da API do Google Gemini para usar o assistente IA.";
+      return "A chave da API do Google Gemini não está configurada. Por favor, adicione-a ao arquivo .env.local.";
     }
 
     try {
@@ -94,10 +118,11 @@ const AIHelper = () => {
     const messageText = text || inputMessage.trim();
     if (!messageText) return;
 
-    if (showApiInput && !geminiApiKey) {
+    // REMOVIDO: A verificação da chave é feita antes de enviar
+    if (!geminiApiKey) {
       toast({
-        title: "Chave API necessária",
-        description: "Configure sua chave da API do Google Gemini primeiro.",
+        title: "Chave API não configurada",
+        description: "A VITE_GEMINI_API_KEY precisa estar no seu arquivo .env.local.",
         variant: "destructive",
       });
       return;
@@ -155,106 +180,85 @@ const AIHelper = () => {
           Tire suas dúvidas sobre contabilidade e impostos com nossa IA
         </CardDescription>
         
-        {showApiInput && (
-          <div className="space-y-2">
-            <Input
-              placeholder="Cole sua chave API do Google Gemini aqui"
-              type="password"
-              value={geminiApiKey}
-              onChange={(e) => setGeminiApiKey(e.target.value)}
-            />
-            <Button 
-              onClick={() => setShowApiInput(false)}
-              disabled={!geminiApiKey}
-              size="sm"
-              className="w-full"
-            >
-              Configurar IA
-            </Button>
-          </div>
-        )}
+        {/* REMOVIDO: O input da chave da API foi removido da interface */}
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col space-y-4 overflow-hidden">
-        {!showApiInput && (
-          <>
-            <ScrollArea className="flex-1 pr-4">
-              <div className="space-y-4">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex gap-2 ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    {message.sender === 'ai' && (
-                      <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                        <Bot className="h-4 w-4 text-primary-foreground" />
-                      </div>
-                    )}
-                    <div
-                      className={`max-w-[80%] p-3 rounded-lg text-sm ${
-                        message.sender === 'user'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted'
-                      }`}
-                    >
-                      {message.text}
-                    </div>
-                    {message.sender === 'user' && (
-                      <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
-                        <User className="h-4 w-4 text-secondary-foreground" />
-                      </div>
-                    )}
+        <ScrollArea className="flex-1 pr-4">
+          <div className="space-y-4">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex gap-2 ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                {message.sender === 'ai' && (
+                  <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                    <Bot className="h-4 w-4 text-primary-foreground" />
                   </div>
-                ))}
-                {isLoading && (
-                  <div className="flex gap-2 justify-start">
-                    <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
-                      <Bot className="h-4 w-4 text-primary-foreground" />
-                    </div>
-                    <div className="bg-muted p-3 rounded-lg text-sm">
-                      Digitando...
-                    </div>
+                )}
+                <div
+                  className={`max-w-[80%] p-3 rounded-lg text-sm ${
+                    message.sender === 'user'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted'
+                  }`}
+                >
+                  {message.text}
+                </div>
+                {message.sender === 'user' && (
+                  <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
+                    <User className="h-4 w-4 text-secondary-foreground" />
                   </div>
                 )}
               </div>
-            </ScrollArea>
-
-            <div className="space-y-3 flex-shrink-0">
-              <div className="flex flex-wrap gap-2">
-                {commonQuestions.slice(0, 3).map((question, index) => (
-                  <Button
-                    key={index}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => sendMessage(question)}
-                    className="text-xs"
-                    disabled={isLoading}
-                  >
-                    <HelpCircle className="h-3 w-3 mr-1" />
-                    {question}
-                  </Button>
-                ))}
+            ))}
+            {isLoading && (
+              <div className="flex gap-2 justify-start">
+                <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
+                  <Bot className="h-4 w-4 text-primary-foreground" />
+                </div>
+                <div className="bg-muted p-3 rounded-lg text-sm">
+                  Digitando...
+                </div>
               </div>
+            )}
+          </div>
+        </ScrollArea>
 
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Digite sua pergunta sobre contabilidade..."
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  disabled={isLoading}
-                />
-                <Button 
-                  onClick={() => sendMessage()}
-                  disabled={isLoading || !inputMessage.trim()}
-                  size="icon"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </>
-        )}
+        <div className="space-y-3 flex-shrink-0">
+          <div className="flex flex-wrap gap-2">
+            {commonQuestions.slice(0, 3).map((question, index) => (
+              <Button
+                key={index}
+                variant="outline"
+                size="sm"
+                onClick={() => sendMessage(question)}
+                className="text-xs"
+                disabled={isLoading || !geminiApiKey} // ADICIONADO: Desabilita se não houver chave
+              >
+                <HelpCircle className="h-3 w-3 mr-1" />
+                {question}
+              </Button>
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            <Input
+              placeholder="Digite sua pergunta sobre contabilidade..."
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              disabled={isLoading || !geminiApiKey} // ADICIONADO: Desabilita se não houver chave
+            />
+            <Button 
+              onClick={() => sendMessage()}
+              disabled={isLoading || !inputMessage.trim() || !geminiApiKey} // ADICIONADO: Desabilita se não houver chave
+              size="icon"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

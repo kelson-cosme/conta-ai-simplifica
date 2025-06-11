@@ -1,37 +1,75 @@
+// src/components/ReportsSection.tsx
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Download, TrendingUp, Calculator } from "lucide-react";
+import { FileText, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useNFEData } from "@/hooks/useNFEData";
+import jsPDF from "jspdf";
+// MODIFICADO: Importamos a função 'autoTable' diretamente em vez de importar para efeitos secundários.
+import autoTable from "jspdf-autotable";
+
+// REMOVIDO: O bloco "declare module" não é mais necessário,
+// pois não estamos mais modificando a interface do jsPDF.
 
 export const ReportsSection = () => {
   const { toast } = useToast();
+  const { nfeList, isLoading } = useNFEData();
 
   const generateReport = (type: string) => {
+    if (nfeList.length === 0) {
+      toast({
+        title: "Nenhum dado para gerar relatório",
+        description: "Processe algumas notas fiscais primeiro.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const doc = new jsPDF();
+    
+    doc.setFontSize(18);
+    doc.text(`Relatório de ${type}`, 14, 22);
+    
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 29);
+
+    const tableColumn = ["Data", "Número", "Emitente", "Tipo", "Valor Total"];
+    const tableRows: any[] = [];
+
+    nfeList.forEach(nfe => {
+      const nfeData = [
+        new Date(nfe.dataEmissao).toLocaleDateString('pt-BR'),
+        nfe.numero,
+        nfe.emitente.razaoSocial,
+        nfe.tipo,
+        `R$ ${nfe.totais.valorNota.toFixed(2)}`
+      ];
+      tableRows.push(nfeData);
+    });
+
+    // MODIFICADO: A função agora é chamada como autoTable(doc, options)
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 35,
+    });
+
+    doc.save(`relatorio_${type.toLowerCase()}_${new Date().getTime()}.pdf`);
+
     toast({
       title: "Relatório Gerado",
-      description: `Relatório ${type} foi gerado com sucesso!`,
+      description: `O download do seu relatório de ${type} deve começar em breve.`,
     });
   };
 
   const reports = [
     {
-      title: "Relatório Mensal",
-      description: "Receitas, despesas e impostos do mês",
+      title: "Notas Fiscais",
+      description: "Lista de todas as NF-e processadas",
       icon: FileText,
-      type: "mensal"
+      type: "Notas"
     },
-    {
-      title: "Análise Tributária",
-      description: "Análise do regime tributário ideal",
-      icon: Calculator,
-      type: "tributaria"
-    },
-    {
-      title: "Fluxo de Caixa",
-      description: "Movimentação financeira detalhada",
-      icon: TrendingUp,
-      type: "fluxo"
-    }
   ];
 
   return (
@@ -55,6 +93,7 @@ export const ReportsSection = () => {
                 onClick={() => generateReport(report.title)}
                 className="w-full"
                 variant="outline"
+                disabled={isLoading || nfeList.length === 0}
               >
                 <Download className="h-4 w-4 mr-2" />
                 Gerar Relatório
@@ -63,32 +102,6 @@ export const ReportsSection = () => {
           </Card>
         ))}
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Resumo Fiscal</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-primary">R$ 12.450</p>
-              <p className="text-sm text-muted-foreground">Receita Bruta</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-destructive">R$ 2.890</p>
-              <p className="text-sm text-muted-foreground">Impostos Devidos</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-muted-foreground">R$ 7.320</p>
-              <p className="text-sm text-muted-foreground">Despesas</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-primary">R$ 2.240</p>
-              <p className="text-sm text-muted-foreground">Lucro Líquido</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 };

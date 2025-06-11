@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import DashboardStats from '@/components/DashboardStats';
 import UploadArea from '@/components/UploadArea';
 import AIHelper from '@/components/AIHelper';
@@ -5,8 +6,31 @@ import { ReportsSection } from "@/components/ReportsSection";
 import AdvancedNFEProcessor from "@/components/AdvancedNFEProcessor";
 import AuthWrapper from "@/components/AuthWrapper";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useNFEData } from "@/hooks/useNFEData";
 
 const Index = () => {
+  const { nfeList, isLoading } = useNFEData();
+
+  const dashboardData = useMemo(() => {
+    const receitaTotal = nfeList
+      .filter(nfe => nfe.tipo === 'saida')
+      .reduce((sum, nfe) => sum + (nfe.totais?.valorNota || 0), 0);
+      
+    const despesasTotais = nfeList
+      .filter(nfe => nfe.tipo === 'entrada')
+      .reduce((sum, nfe) => sum + (nfe.totais?.valorNota || 0), 0);
+
+    const impostosTotais = nfeList
+      .reduce((sum, nfe) => sum + (nfe.totais?.valorIcms || 0) + (nfe.totais?.valorIpi || 0), 0);
+
+    return {
+      totalNotas: nfeList.length,
+      receitaTotal,
+      despesasTotais,
+      impostosTotais
+    };
+  }, [nfeList]);
+
   return (
     <AuthWrapper>
       <div className="container mx-auto px-4 py-8">
@@ -19,10 +43,14 @@ const Index = () => {
           </p>
         </div>
 
-        {/* Dashboard Stats sempre visível */}
-        <DashboardStats />
+        <DashboardStats 
+          isLoading={isLoading}
+          totalNotas={dashboardData.totalNotas}
+          receitaTotal={dashboardData.receitaTotal}
+          despesasTotais={dashboardData.despesasTotais}
+          impostosTotais={dashboardData.impostosTotais}
+        />
         
-        {/* Main Content Tabs */}
         <div className="mt-8">
           <Tabs defaultValue="upload" className="space-y-6">
             <TabsList className="grid w-full grid-cols-4">
@@ -38,7 +66,6 @@ const Index = () => {
                 <AIHelper />
               </div>
               
-              {/* Seção de boas-vindas */}
               <div className="bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg p-6">
                 <h3 className="text-xl font-semibold mb-2">Bem-vindo ao ContábilFácil!</h3>
                 <p className="text-muted-foreground mb-4">
