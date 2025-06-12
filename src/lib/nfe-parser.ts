@@ -1,11 +1,13 @@
-// src/lib/nfe-parser.ts
-
+// --- INTERFACES DE DADOS ---
 export interface NFEData {
   id: string;
   numero: string;
   serie: string;
   dataEmissao: string;
   tipo: 'entrada' | 'saida';
+  chaveAcesso: string;
+  protocolo?: string;
+  status: 'processando' | 'validada' | 'cancelada' | 'erro';
   emitente: {
     cnpj: string;
     razaoSocial: string;
@@ -46,85 +48,169 @@ export interface NFEData {
     valorCofins: number;
     valorNota: number;
   };
-  // ADICIONADO: A propriedade transportadora foi adicionada de volta e é opcional.
   transportadora?: {
     cnpj: string;
     razaoSocial: string;
     endereco: string;
   };
   observacoes?: string;
-  chaveAcesso: string;
-  protocolo?: string;
-  status: 'processando' | 'validada' | 'cancelada' | 'erro';
 }
 
+export interface NFSEData {
+  id: string;
+  numero: string;
+  codigoVerificacao: string;
+  dataEmissao: string;
+  status: 'processando' | 'validada' | 'cancelada' | 'erro';
+  prestador: {
+    cnpj: string;
+    razaoSocial: string;
+    nomeFantasia?: string;
+    endereco: string;
+    municipio: string;
+    uf: string;
+    cep: string;
+  };
+  tomador: {
+    cnpj?: string;
+    cpf?: string;
+    razaoSocial: string;
+    endereco: string;
+    municipio: string;
+    uf: string;
+    cep: string;
+  };
+  servicos: Array<{
+    codigo: string;
+    descricao: string;
+    cst: string;
+    aliq: number;
+    valorUnitario: number;
+    quantidade: number;
+    valorTotal: number;
+  }>;
+  totais: {
+    baseCalculo: number;
+    valorIss: number;
+    valorTotalServicos: number;
+  };
+  observacoes?: string;
+}
+
+export type ParsedNota = 
+  | { docType: 'nfe'; data: NFEData }
+  | { docType: 'nfse'; data: NFSEData }
+  | { docType: 'unknown'; error: string };
+
+// --- FUNÇÕES DE VALIDAÇÃO E LIMPEZA ---
+function validateNFE(data: any): boolean {
+  return data && data.chaveAcesso && data.emitente?.cnpj && data.numero && data.serie;
+}
+
+function validateNFSE(data: any): boolean {
+  return data && data.codigoVerificacao && data.prestador?.cnpj && data.numero && data.totais?.valorTotalServicos > 0;
+}
+
+function sanitizeNFEData(data: any): NFEData {
+  const getNumber = (value: any) => (typeof value === 'number' ? value : 0);
+
+  data.numero = data.numero || "S/N";
+  data.serie = data.serie || "0";
+  data.chaveAcesso = data.chaveAcesso || "";
+
+  data.totais = {
+    baseIcms: getNumber(data.totais?.baseIcms), valorIcms: getNumber(data.totais?.valorIcms),
+    valorProdutos: getNumber(data.totais?.valorProdutos), valorFrete: getNumber(data.totais?.valorFrete),
+    valorSeguro: getNumber(data.totais?.valorSeguro), valorDesconto: getNumber(data.totais?.valorDesconto),
+    valorIpi: getNumber(data.totais?.valorIpi), valorPis: getNumber(data.totais?.valorPis),
+    valorCofins: getNumber(data.totais?.valorCofins), valorNota: getNumber(data.totais?.valorNota),
+  };
+  data.produtos = Array.isArray(data.produtos) ? data.produtos : [];
+  data.status = validateNFE(data) ? 'validada' : 'erro';
+  return data as NFEData;
+}
+
+function sanitizeNFSEData(data: any): NFSEData {
+  const getNumber = (value: any) => (typeof value === 'number' ? value : 0);
+  
+  data.numero = data.numero || "S/N";
+  data.codigoVerificacao = data.codigoVerificacao || "";
+
+  data.totais = {
+    baseCalculo: getNumber(data.totais?.baseCalculo),
+    valorIss: getNumber(data.totais?.valorIss),
+    valorTotalServicos: getNumber(data.totais?.valorTotalServicos),
+  };
+  data.servicos = Array.isArray(data.servicos) ? data.servicos : [];
+  data.status = validateNFSE(data) ? 'validada' : 'erro';
+  return data as NFSEData;
+}
+
+// --- LÓGICA DO PARSER ---
 async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(',')[1]);
-    };
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
     reader.onerror = reject;
   });
 }
 
-// MODIFICADO: O esquema JSON no prompt agora inclui o campo "transportadora".
-const JSON_SCHEMA_PROMPT = `
-  O formato do JSON deve ser o seguinte:
+const UNIVERSAL_PROMPT = `
+  Sua tarefa é analisar um documento fiscal brasileiro e extrair suas informações.
+  
+  1.  **Primeiro, identifique o tipo de documento.** Ele é uma "NF-e" (Nota Fiscal Eletrônica, para produtos) ou uma "NFS-e" (Nota Fiscal de Serviço Eletrônica, para serviços)?
+  
+  2.  **Segundo, extraia os dados** de acordo com o schema JSON correspondente ao tipo de documento identificado.
+      - Se um campo opcional não for encontrado, seu valor deve ser \`null\`.
+      - Datas devem estar no formato YYYY-MM-DD.
+      - Não invente dados.
+
+  3.  **Terceiro, retorne um ÚNICO objeto JSON** com a seguinte estrutura:
+      \`\`\`json
+      {
+        "docType": "nfe" | "nfse" | "unknown",
+        "data": { ...dados extraídos... }
+      }
+      \`\`\`
+
+  **Schema para docType: "nfe"**
   {
-    "numero": "string", "serie": "string", "dataEmissao": "string no formato YYYY-MM-DD",
-    "chaveAcesso": "string (a chave de 44 dígitos, se presente)", "protocolo": "string (se presente)",
-    "emitente": { "cnpj": "string", "razaoSocial": "string", "endereco": "string", "municipio": "string", "uf": "string", "cep": "string" },
-    "destinatario": { "cnpj": "string", "cpf": "string", "razaoSocial": "string", "endereco": "string", "municipio": "string", "uf": "string", "cep": "string" },
+    "numero": "string", "serie": "string", "dataEmissao": "string", "chaveAcesso": "string | null", "protocolo": "string | null",
+    "emitente": { "cnpj": "string", "razaoSocial": "string", "nomeFantasia": "string | null", "endereco": "string", "municipio": "string", "uf": "string", "cep": "string" },
+    "destinatario": { "cnpj": "string | null", "cpf": "string | null", "razaoSocial": "string", "endereco": "string", "municipio": "string", "uf": "string", "cep": "string" },
     "produtos": [ { "codigo": "string", "descricao": "string", "ncm": "string", "cfop": "string", "unidade": "string", "quantidade": "number", "valorUnitario": "number", "valorTotal": "number" } ],
-    "totais": { "baseIcms": "number", "valorIcms": "number", "valorProdutos": "number", "valorFrete": "number", "valorSeguro": "number", "valorDesconto": "number", "valorIpi": "number", "valorPis": "number", "valorCofins": "number", "valorNota": "number" },
-    "transportadora": { "cnpj": "string", "razaoSocial": "string", "endereco": "string (concatenar logradouro, município e UF)" },
-    "observacoes": "string (informações complementares, se houver)"
+    "totais": { "baseIcms": "number | null", "valorIcms": "number | null", "valorProdutos": "number", "valorFrete": "number | null", "valorSeguro": "number | null", "valorDesconto": "number | null", "valorIpi": "number | null", "valorPis": "number | null", "valorCofins": "number | null", "valorNota": "number" },
+    "observacoes": "string | null"
+  }
+
+  **Schema para docType: "nfse"**
+  {
+    "numero": "string", "codigoVerificacao": "string", "dataEmissao": "string",
+    "prestador": { "cnpj": "string", "razaoSocial": "string", "nomeFantasia": "string | null", "endereco": "string", "municipio": "string", "uf": "string", "cep": "string" },
+    "tomador": { "cnpj": "string | null", "cpf": "string | null", "razaoSocial": "string", "endereco": "string", "municipio": "string", "uf": "string", "cep": "string" },
+    "servicos": [ { "codigo": "string | null", "descricao": "string", "cst": "string | null", "aliq": "number | null", "valorUnitario": "number", "quantidade": "number", "valorTotal": "number" } ],
+    "totais": { "baseCalculo": "number | null", "valorIss": "number | null", "valorTotalServicos": "number" },
+    "observacoes": "string | null"
   }
 `;
 
-export class NFEParser {
-  static async parseXML(xmlContent: string, geminiApiKey: string): Promise<NFEData> {
+export class NotaFiscalParser {
+  static async processDocument(file: File, geminiApiKey: string): Promise<ParsedNota> {
     if (!geminiApiKey) throw new Error("A chave da API do Gemini não foi fornecida.");
     
-    const prompt = `Você é um especialista em processar documentos fiscais brasileiros. Analise o conteúdo do XML de NF-e abaixo. Retorne APENAS um objeto JSON válido, sem nenhum texto extra. ${JSON_SCHEMA_PROMPT}\n\nConteúdo XML: ${xmlContent}`;
+    const isXml = file.type === 'application/xml' || file.type === 'text/xml' || file.name.toLowerCase().endsWith('.xml');
+    let requestBody: any;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-    });
-
-    if (!response.ok) throw new Error(`Erro na API do Gemini: ${response.statusText}`);
-
-    const data = await response.json();
-    const jsonText = data.candidates[0].content.parts[0].text;
-    
-    try {
-      const extractedData = JSON.parse(jsonText.replace(/```json\n?|\n?```/g, ''));
-      return { ...extractedData, id: extractedData.chaveAcesso, tipo: 'saida', status: 'processando' } as NFEData;
-    } catch (e) {
-      console.error("Erro ao analisar JSON da IA (XML):", jsonText);
-      throw new Error("A IA retornou uma resposta em formato inválido para o XML.");
+    if (isXml) {
+      const xmlContent = await file.text();
+      requestBody = { contents: [{ parts: [{ text: `${UNIVERSAL_PROMPT}\n\nConteúdo do Documento:\n${xmlContent}` }] }] };
+    } else {
+      const base64Data = await fileToBase64(file);
+      requestBody = {
+        contents: [{ parts: [ { text: UNIVERSAL_PROMPT }, { inline_data: { mime_type: file.type, data: base64Data } } ] }]
+      };
     }
-  }
-
-  static async processPDF(file: File, geminiApiKey: string): Promise<NFEData> {
-    if (!geminiApiKey) throw new Error("A chave da API do Gemini não foi fornecida.");
-    
-    const base64Data = await fileToBase64(file);
-    const prompt = `Você é um especialista em processar documentos fiscais. Analise a imagem ou texto do arquivo PDF de NF-e/DANFE em anexo. Extraia as informações e retorne APENAS um objeto JSON válido, sem nenhum texto extra. ${JSON_SCHEMA_PROMPT}`;
-
-    const requestBody = {
-      contents: [{
-        parts: [
-          { text: prompt },
-          { inline_data: { mime_type: file.type, data: base64Data } }
-        ]
-      }]
-    };
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
@@ -132,26 +218,31 @@ export class NFEParser {
       body: JSON.stringify(requestBody),
     });
 
-    if (!response.ok) throw new Error(`Erro na API do Gemini para PDF: ${response.statusText}`);
-    
-    const data = await response.json();
-    const jsonText = data.candidates[0].content.parts[0].text;
+    if (!response.ok) throw new Error(`Erro na API do Gemini: ${response.statusText}`);
+
+    const responseData = await response.json();
+    const jsonText = responseData.candidates[0].content.parts[0].text;
 
     try {
-      const extractedData = JSON.parse(jsonText.replace(/```json\n?|\n?```/g, ''));
-       return { ...extractedData, id: extractedData.chaveAcesso, tipo: 'entrada', status: 'processando' } as NFEData;
+      const result = JSON.parse(jsonText.replace(/```json\n?|\n?```/g, ''));
+      
+      if (result.docType === 'nfe') {
+        const sanitizedData = sanitizeNFEData(result.data);
+        return { docType: 'nfe', data: { ...sanitizedData, tipo: isXml ? 'saida' : 'entrada' } };
+      }
+      
+      if (result.docType === 'nfse') {
+        const sanitizedData = sanitizeNFSEData(result.data);
+        return { docType: 'nfse', data: sanitizedData };
+      }
+      
+      return { docType: 'unknown', error: "Tipo de documento não reconhecido pela IA." };
     } catch (e) {
-      console.error("Erro ao analisar JSON da IA (PDF):", jsonText);
-      throw new Error("A IA retornou uma resposta em formato inválido para o PDF.");
+      console.error("Erro ao analisar JSON da IA:", jsonText, e);
+      throw new Error("A IA retornou uma resposta em formato JSON inválido.");
     }
   }
 
-  static validateNFE(nfeData: NFEData): { valid: boolean; errors: string[] } {
-    const errors: string[] = [];
-    if (!nfeData.chaveAcesso || (nfeData.chaveAcesso.length !== 44 && nfeData.chaveAcesso !== '0'.repeat(44))) errors.push('Chave de acesso inválida');
-    if (!nfeData.emitente.cnpj) errors.push('CNPJ do emitente inválido');
-    return { valid: errors.length === 0, errors };
-  }
   static formatCurrency(value: number): string {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
   }

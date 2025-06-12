@@ -1,10 +1,11 @@
+// src/components/UploadArea.tsx
 import { Upload, FileText, AlertCircle, CheckCircle, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useState, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useNFEData } from '@/hooks/useNFEData';
-import { NFEParser, NFEData } from '@/lib/nfe-parser';
+import { NotaFiscalParser } from '@/lib/nfe-parser'; // MODIFICADO
 
 const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
@@ -21,8 +22,9 @@ const UploadArea = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const { saveNFE } = useNFEData();
+  const { saveNota } = useNFEData(); // MODIFICADO: usa a nova função saveNota
 
+  // MODIFICADO: A função agora usa o parser universal
   const processFile = async (file: File) => {
     const fileId = Math.random().toString(36).substr(2, 9);
     
@@ -34,23 +36,22 @@ const UploadArea = () => {
     try {
       if (!geminiApiKey) throw new Error("Chave da API do Gemini não configurada.");
 
-      let nfeData: NFEData;
-
-      if (file.type === 'application/xml' || file.type === 'text/xml' || file.name.toLowerCase().endsWith('.xml')) {
-        const content = await file.text();
-        nfeData = await NFEParser.parseXML(content, geminiApiKey);
-      } else if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-        nfeData = await NFEParser.processPDF(file, geminiApiKey);
-      } else {
-        throw new Error('Tipo de arquivo não suportado.');
+      const parsedNota = await NotaFiscalParser.processDocument(file, geminiApiKey);
+      
+      if (parsedNota.docType === 'unknown') {
+        throw new Error(parsedNota.error);
       }
       
-      const validation = NFEParser.validateNFE(nfeData);
-      nfeData.status = validation.valid ? 'validada' : 'erro';
+      const success = await saveNota(parsedNota);
 
-      await saveNFE(nfeData);
-
-      setProcessedFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'sucesso', message: `NF-e ${nfeData.numero} salva!` } : f));
+      if (success) {
+        setProcessedFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'sucesso', message: `Nota ${parsedNota.data.numero} salva!` } : f));
+      } else {
+        // O erro de duplicidade ou outro erro já é mostrado pelo toast no hook saveNota
+        // Apenas marcamos como erro na UI local
+        setProcessedFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'erro', message: 'Falha ao salvar. Verifique o console.' } : f));
+      }
+      
     } catch (error: any) {
       setProcessedFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'erro', message: error.message } : f));
       toast({ title: "Erro no Processamento", description: error.message, variant: "destructive" });
@@ -79,7 +80,7 @@ const UploadArea = () => {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Upload />Upload de Notas Fiscais</CardTitle>
-        <CardDescription>Arraste ou selecione seus arquivos XML ou PDF de NF-e</CardDescription>
+        <CardDescription>Arraste ou selecione seus arquivos XML, PDF de NF-e ou PDF de NFS-e</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="border-2 border-dashed rounded-lg p-8 text-center">

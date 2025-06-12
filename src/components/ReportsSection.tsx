@@ -1,25 +1,21 @@
-// src/components/ReportsSection.tsx
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNFEData } from "@/hooks/useNFEData";
+import { NotaFiscalParser } from "@/lib/nfe-parser"; // ADICIONADO
 import jsPDF from "jspdf";
-// MODIFICADO: Importamos a função 'autoTable' diretamente em vez de importar para efeitos secundários.
 import autoTable from "jspdf-autotable";
-
-// REMOVIDO: O bloco "declare module" não é mais necessário,
-// pois não estamos mais modificando a interface do jsPDF.
 
 export const ReportsSection = () => {
   const { toast } = useToast();
-  const { nfeList, isLoading } = useNFEData();
+  const { notaList, isLoading } = useNFEData(); // MODIFICADO
 
   const generateReport = (type: string) => {
-    if (nfeList.length === 0) {
+    if (notaList.length === 0) { // MODIFICADO
       toast({
         title: "Nenhum dado para gerar relatório",
-        description: "Processe algumas notas fiscais primeiro.",
+        description: "Processe alguns documentos fiscais primeiro.",
         variant: "destructive",
       });
       return;
@@ -34,28 +30,29 @@ export const ReportsSection = () => {
     doc.setTextColor(100);
     doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 29);
 
-    const tableColumn = ["Data", "Número", "Emitente", "Tipo", "Valor Total"];
+    // MODIFICADO: Colunas ajustadas para o novo formato
+    const tableColumn = ["Data", "Número", "Emitente/Prestador", "Tipo Doc.", "Valor Total"];
     const tableRows: any[] = [];
 
-    nfeList.forEach(nfe => {
-      const nfeData = [
-        new Date(nfe.dataEmissao).toLocaleDateString('pt-BR'),
-        nfe.numero,
-        nfe.emitente.razaoSocial,
-        nfe.tipo,
-        `R$ ${nfe.totais.valorNota.toFixed(2)}`
+    // MODIFICADO: Itera sobre a lista unificada 'notaList'
+    notaList.forEach(nota => {
+      const notaData = [
+        new Date(nota.dataEmissao).toLocaleDateString('pt-BR'),
+        nota.numero,
+        nota.nomeEntidade, // Usa o campo unificado
+        nota.docType.toUpperCase(), // Adiciona o tipo de documento
+        NotaFiscalParser.formatCurrency(nota.valor) // Usa o campo unificado e formata
       ];
-      tableRows.push(nfeData);
+      tableRows.push(notaData);
     });
 
-    // MODIFICADO: A função agora é chamada como autoTable(doc, options)
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: 35,
     });
 
-    doc.save(`relatorio_${type.toLowerCase()}_${new Date().getTime()}.pdf`);
+    doc.save(`relatorio_${type.toLowerCase().replace(' ', '_')}_${new Date().getTime()}.pdf`);
 
     toast({
       title: "Relatório Gerado",
@@ -65,10 +62,10 @@ export const ReportsSection = () => {
 
   const reports = [
     {
-      title: "Notas Fiscais",
-      description: "Lista de todas as NF-e processadas",
+      title: "Documentos Fiscais",
+      description: "Lista de todas as NF-e e NFS-e processadas", // MODIFICADO
       icon: FileText,
-      type: "Notas"
+      type: "Documentos"
     },
   ];
 
@@ -93,7 +90,7 @@ export const ReportsSection = () => {
                 onClick={() => generateReport(report.title)}
                 className="w-full"
                 variant="outline"
-                disabled={isLoading || nfeList.length === 0}
+                disabled={isLoading || notaList.length === 0} // MODIFICADO
               >
                 <Download className="h-4 w-4 mr-2" />
                 Gerar Relatório

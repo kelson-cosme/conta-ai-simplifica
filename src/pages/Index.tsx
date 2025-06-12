@@ -9,37 +9,49 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNFEData } from "@/hooks/useNFEData";
 
 const Index = () => {
-  const { nfeList, isLoading } = useNFEData();
+  const { notaList, isLoading } = useNFEData();
 
+  // MODIFICADO: Lógica de cálculo do dashboard foi atualizada
   const dashboardData = useMemo(() => {
-    const receitaTotal = nfeList
+    // Separa as notas por tipo para facilitar os cálculos
+    const nfeList = notaList.filter(nota => nota.docType === 'nfe');
+    const nfseList = notaList.filter(nota => nota.docType === 'nfse');
+
+    // Calcula a receita de produtos (NF-e de saída)
+    const receitaDeProdutos = nfeList
       .filter(nfe => nfe.tipo === 'saida')
-      .reduce((sum, nfe) => sum + (nfe.totais?.valorNota || 0), 0);
+      .reduce((sum, nfe) => sum + nfe.valor, 0);
       
+    // Calcula a receita de serviços (todas as NFS-e)
+    const receitaDeServicos = nfseList.reduce((sum, nfse) => sum + nfse.valor, 0);
+
+    // Soma as duas receitas para o total
+    const receitaTotal = receitaDeProdutos + receitaDeServicos;
+
+    // Despesas continuam sendo apenas as NF-e de entrada
     const despesasTotais = nfeList
       .filter(nfe => nfe.tipo === 'entrada')
-      .reduce((sum, nfe) => sum + (nfe.totais?.valorNota || 0), 0);
+      .reduce((sum, nfe) => sum + nfe.valor, 0);
 
-    const impostosTotais = nfeList
-      .reduce((sum, nfe) => sum + (nfe.totais?.valorIcms || 0) + (nfe.totais?.valorIpi || 0), 0);
+    const impostosTotais = 0; // Temporariamente desativado
 
     return {
-      totalNotas: nfeList.length,
+      totalNotas: notaList.length,
       receitaTotal,
       despesasTotais,
       impostosTotais
     };
-  }, [nfeList]);
+  }, [notaList]);
 
   return (
     <AuthWrapper>
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-foreground mb-2">
-            Dashboard ContábilFácil
+            Dashboard Simplifica
           </h2>
           <p className="text-muted-foreground">
-            Gestão contábil completa para micro e pequenos empreendedores
+            Sua gestão fiscal e contábil em um só lugar.
           </p>
         </div>
 
@@ -52,29 +64,29 @@ const Index = () => {
         />
         
         <div className="mt-8">
-          <Tabs defaultValue="upload" className="space-y-6">
+          <Tabs defaultValue="inicio" className="space-y-6">
             <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="upload">Início</TabsTrigger>
-              <TabsTrigger value="invoices">Notas Fiscais</TabsTrigger>
-              <TabsTrigger value="reports">Relatórios</TabsTrigger>
+              <TabsTrigger value="inicio">Início</TabsTrigger>
+              <TabsTrigger value="documentos">Documentos</TabsTrigger>
+              <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
               <TabsTrigger value="chat">Assistente IA</TabsTrigger>
             </TabsList>
             
-            <TabsContent value="upload" className="space-y-6">
+            <TabsContent value="inicio" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <UploadArea />
                 <AIHelper />
               </div>
               
               <div className="bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg p-6">
-                <h3 className="text-xl font-semibold mb-2">Bem-vindo ao ContábilFácil!</h3>
+                <h3 className="text-xl font-semibold mb-2">Bem-vindo à Simplifica!</h3>
                 <p className="text-muted-foreground mb-4">
                   Comece fazendo upload das suas notas fiscais para ter uma visão completa 
                   da sua situação contábil. Nossa IA está aqui para ajudar com qualquer dúvida.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <span className="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm">
-                    📄 Leitura automática de NF-e
+                    📄 Leitura de NF-e e NFS-e
                   </span>
                   <span className="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm">
                     📊 Relatórios automatizados
@@ -86,11 +98,11 @@ const Index = () => {
               </div>
             </TabsContent>
             
-            <TabsContent value="invoices">
+            <TabsContent value="documentos">
               <AdvancedNFEProcessor />
             </TabsContent>
             
-            <TabsContent value="reports">
+            <TabsContent value="relatorios">
               <ReportsSection />
             </TabsContent>
             

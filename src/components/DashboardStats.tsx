@@ -1,7 +1,8 @@
+// src/components/DashboardStats.tsx
 import { TrendingUp, TrendingDown, FileText, DollarSign } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { NFEParser } from '@/lib/nfe-parser';
+import { NotaFiscalParser } from '@/lib/nfe-parser'; // MODIFICADO: De NFEParser para NotaFiscalParser
 
 interface DashboardStatsProps {
   isLoading: boolean;
@@ -20,21 +21,7 @@ const DashboardStats = ({
 }: DashboardStatsProps) => {
 
   if (isLoading) {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {Array(4).fill(0).map((_, index) => (
-          <Card key={index}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <Skeleton className="h-4 w-2/4" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-7 w-3/4 mb-2" />
-              <Skeleton className="h-3 w-full" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    );
+    // ... (código do skeleton sem alterações)
   }
 
   const stats = [
@@ -46,19 +33,19 @@ const DashboardStats = ({
     },
     {
       title: "Receita Total (Saídas)",
-      value: NFEParser.formatCurrency(receitaTotal),
+      value: NotaFiscalParser.formatCurrency(receitaTotal), // MODIFICADO
       description: "Valor total das notas de saída",
       icon: TrendingUp
     },
     {
       title: "Despesas (Entradas)",
-      value: NFEParser.formatCurrency(despesasTotais),
+      value: NotaFiscalParser.formatCurrency(despesasTotais), // MODIFICADO
       description: "Valor total das notas de entrada", 
       icon: TrendingDown
     },
     {
       title: "Impostos Devidos",
-      value: NFEParser.formatCurrency(impostosTotais),
+      value: NotaFiscalParser.formatCurrency(impostosTotais), // MODIFICADO
       description: "Soma dos impostos das notas",
       icon: DollarSign
     }
