@@ -34,19 +34,25 @@ Deno.serve(async (req) => {
 
   const eventObject = event.data.object as any;
 
-  try {
+try {
     switch (event.type) {
       case 'checkout.session.completed': {
         console.log("Processando 'checkout.session.completed'");
         const checkoutSession = eventObject as Stripe.Checkout.Session;
+        
+        // MODIFICADO: Adicionada verificação para garantir que o ID do usuário existe
+        const supabaseUserId = checkoutSession.client_reference_id;
+        if (!supabaseUserId) {
+            console.error("ERRO: client_reference_id não encontrado na sessão de checkout.");
+            // Retornamos 200 para o Stripe não reenviar, pois é um erro de configuração.
+            return new Response(JSON.stringify({ received: true, error: "Missing client_reference_id" }), { status: 200 });
+        }
 
-        // LOG DE DEPURAÇÃO IMPORTANTE
-        console.log("Client Reference ID (Supabase User ID):", checkoutSession.client_reference_id);
+        console.log("ID de Usuário Supabase (client_reference_id):", supabaseUserId);
 
         if (checkoutSession.mode === 'subscription') {
           const subscription = await stripe.subscriptions.retrieve(checkoutSession.subscription as string);
 
-          // LOG DE DEPURAÇÃO IMPORTANTE
           console.log("Status da assinatura recebido do Stripe:", subscription.status);
           console.log("Stripe Customer ID:", subscription.customer);
 
@@ -56,17 +62,17 @@ Deno.serve(async (req) => {
               subscription_status: subscription.status,
               stripe_customer_id: subscription.customer as string
             })
-            .eq('id', checkoutSession.client_reference_id);
+            .eq('id', supabaseUserId); // Usando a variável verificada
 
           if (error) {
             console.error("ERRO ao atualizar o perfil no Supabase:", error);
           } else {
-            console.log("Sucesso! Perfil atualizado no Supabase para o usuário:", checkoutSession.client_reference_id);
+            console.log("Sucesso! Perfil atualizado no Supabase para o usuário:", supabaseUserId);
           }
         }
         break;
       }
-      // Adicionamos outros eventos para depuração, caso cheguem
+      // ... (o restante do código permanece o mesmo)
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {

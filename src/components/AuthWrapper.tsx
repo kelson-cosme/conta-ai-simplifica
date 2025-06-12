@@ -1,3 +1,5 @@
+// src/components/AuthWrapper.tsx
+
 import { useEffect, useState, useCallback, ReactNode, FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -36,8 +38,6 @@ const AuthWrapper = ({ children }: AuthWrapperProps) => {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const { toast } = useToast();
 
-  // ------------ INÍCIO DA MUDANÇA ------------
-  // Refatorando a função para ser mais direta.
   const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
     setIsAuthenticating(true);
@@ -45,10 +45,8 @@ const AuthWrapper = ({ children }: AuthWrapperProps) => {
     try {
       let error;
       if (isSignUp) {
-        // Chamada direta para signUp
         ({ error } = await supabase.auth.signUp({ email, password }));
       } else {
-        // Chamada direta para signInWithPassword
         ({ error } = await supabase.auth.signInWithPassword({ email, password }));
       }
 
@@ -68,7 +66,6 @@ const AuthWrapper = ({ children }: AuthWrapperProps) => {
       setIsAuthenticating(false);
     }
   };
-  // ------------ FIM DA MUDANÇA ------------
 
   const checkSubscription = useCallback(async (userId: string) => {
     let { data, error } = await supabase
@@ -77,7 +74,7 @@ const AuthWrapper = ({ children }: AuthWrapperProps) => {
       .eq('id', userId)
       .single();
 
-    if (error && error.code === 'PGRST116') {
+    if (error && error.code === 'PGRST116') { // Código para 'no rows found'
       const { error: insertError } = await supabase
         .from('profiles')
         .insert({ id: userId });
@@ -94,10 +91,11 @@ const AuthWrapper = ({ children }: AuthWrapperProps) => {
     const currentStatus = data?.subscription_status || null;
     setSubscriptionStatus(currentStatus);
 
-    if (currentStatus === 'active') {
+    // MODIFICADO: Agora aceita 'active' ou 'trialing' para parar a verificação
+    if (currentStatus === 'active' || currentStatus === 'trialing') {
         setIsVerifying(false);
     }
-  }, []);
+  }, []); //
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -114,7 +112,7 @@ const AuthWrapper = ({ children }: AuthWrapperProps) => {
       }
     );
     return () => subscription.unsubscribe();
-  }, [checkSubscription]);
+  }, [checkSubscription]); //
 
   useEffect(() => {
     if (isVerifying && user) {
@@ -123,9 +121,7 @@ const AuthWrapper = ({ children }: AuthWrapperProps) => {
       }, 2000);
       return () => clearInterval(interval);
     }
-  }, [isVerifying, user, checkSubscription]);
-
-  // ... (Restante do componente sem alterações) ...
+  }, [isVerifying, user, checkSubscription]); //
 
   if (loading) {
     return <div className="min-h-screen bg-gray-100 flex items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
@@ -169,7 +165,8 @@ const AuthWrapper = ({ children }: AuthWrapperProps) => {
     );
   }
 
-  if (subscriptionStatus !== 'active') {
+  // MODIFICADO: A verificação aqui também considera o status 'trialing' como válido
+  if (subscriptionStatus !== 'active' && subscriptionStatus !== 'trialing') {
     return <PricingPage />;
   }
 
