@@ -1,7 +1,7 @@
 // src/components/AuthWrapper.tsx
 
 import { useEffect, useState, useCallback, ReactNode, FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +10,6 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { LogIn, UserPlus, Loader2 } from 'lucide-react';
 import PricingPage from '@/pages/Pricing';
-
 interface AuthWrapperProps {
   children: ReactNode;
 }
@@ -37,7 +36,8 @@ const AuthWrapper = ({ children }: AuthWrapperProps) => {
   const [password, setPassword] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const { toast } = useToast();
-
+  
+  const navigate = useNavigate();
   const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
     setIsAuthenticating(true);
@@ -49,7 +49,7 @@ const AuthWrapper = ({ children }: AuthWrapperProps) => {
       } else {
         ({ error } = await supabase.auth.signInWithPassword({ email, password }));
       }
-
+useNavigate
       if (error) throw error;
 
       toast({
@@ -66,7 +66,7 @@ const AuthWrapper = ({ children }: AuthWrapperProps) => {
       setIsAuthenticating(false);
     }
   };
-
+  
   const checkSubscription = useCallback(async (userId: string) => {
     let { data, error } = await supabase
       .from('profiles')
@@ -88,14 +88,14 @@ const AuthWrapper = ({ children }: AuthWrapperProps) => {
       return;
     }
 
-    const currentStatus = data?.subscription_status || null;
+    const currentStatus = (data?.subscription_status as SubscriptionStatus) || null;
     setSubscriptionStatus(currentStatus);
 
     // MODIFICADO: Agora aceita 'active' ou 'trialing' para parar a verificação
     if (currentStatus === 'active' || currentStatus === 'trialing') {
         setIsVerifying(false);
     }
-  }, []); //
+  }, []);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
