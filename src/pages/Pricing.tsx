@@ -122,7 +122,7 @@ const PricingPage = () => {
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Cadastrar e Pagar'}
               </Button>
               <div className="text-center">
-                <Button variant="link" onClick={() => navigate('/login')} className="text-sm">
+                <Button variant="link" onClick={() => navigate('/')} className="text-sm">
                   Já tem uma conta? Faça login
                 </Button>
               </div>
