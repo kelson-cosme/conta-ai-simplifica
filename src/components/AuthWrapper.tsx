@@ -155,7 +155,7 @@ useNavigate
               </Button>
             </form>
             <div className="mt-4 text-center">
-              <Button variant="link" onClick={() => setIsSignUp(!isSignUp)} className="text-sm">
+              <Button variant="link" onClick={() => navigate("/pricing")} className="text-sm">
                 {isSignUp ? 'Já tem uma conta? Entre aqui' : 'Não tem conta? Crie uma aqui'}
               </Button>
             </div>

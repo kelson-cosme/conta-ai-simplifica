@@ -7,13 +7,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { LogIn, Loader2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom'; // Importe useNavigate
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const { toast } = useToast();
+  const navigate = useNavigate(); // Inicialize o hook de navegação
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -28,7 +29,7 @@ const LoginPage = () => {
         title: "Login realizado!",
         description: "Bem-vindo de volta ao sistema!",
       });
-      // Redirecionamento será tratado pelo AuthWrapper
+
     } catch (error: any) {
       toast({
         title: "Erro no Login",
