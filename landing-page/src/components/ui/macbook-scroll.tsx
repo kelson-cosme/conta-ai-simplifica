@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { MotionValue, motion, useScroll, useTransform } from "motion/react";
 import { cn } from "@/lib/utils";
 import {
@@ -28,8 +28,7 @@ import Sistema from "@/assets/sistema.png"
 export const MacbookScroll = ({
   src,
   showGradient,
-  title,
-  badge,
+    badge,
 }: {
   src?: string;
   showGradient?: boolean;
@@ -120,8 +119,7 @@ export const Lid = ({
   scaleY,
   rotate,
   translate,
-  src,
-}: {
+  }: {
   scaleX: MotionValue<number>;
   scaleY: MotionValue<number>;
   rotate: MotionValue<number>;
