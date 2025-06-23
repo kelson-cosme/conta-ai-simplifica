@@ -2,7 +2,7 @@ import { HoverEffect } from "@/components/ui/card-hover-effect";
 
 export function CardHoverEffectDemo() {
   return (
-    <div className="max-w-5xl mx-auto ">
+    <div className="max-w-5xl mx-auto mt-10">
       <h1 className="text-white font-bold text-4xl">Recursos Poderosos</h1>
       <p className="text-gray-400">Tudo o que você precisa para simplificar sua contabilidade como MEI</p>
       <HoverEffect items={projects} />
