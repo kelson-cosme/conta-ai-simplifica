@@ -1,7 +1,7 @@
 function Rodape(){
     return(
         <>
-        <footer className="flex justify-between text-white text-left mt-14 mb-14" >
+        <footer className="flex flex-wrap justify-between text-white text-left mt-14 mb-14" >
             <div className="w-[35%]">
                 <h1>NFEasy</h1>
                 <p>A solução inteligente para automação contábil de Microempreendedores Individuais.</p>
