@@ -4,7 +4,7 @@ import UploadArea from '@/components/UploadArea';
 import AIHelper from '@/components/AIHelper';
 import { ReportsSection } from "@/components/ReportsSection";
 import AdvancedNFEProcessor from "@/components/AdvancedNFEProcessor";
-import AuthWrapper from "@/components/AuthWrapper";
+import {AuthWrapper} from "@/components/AuthWrapper";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNFEData } from "@/hooks/useNFEData";
 

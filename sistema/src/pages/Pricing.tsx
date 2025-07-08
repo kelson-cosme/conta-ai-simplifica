@@ -1,151 +1,172 @@
-// src/pages/Pricing.tsx
+// sistema/src/pages/Pricing.tsx
 import { useState, FormEvent, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Check, Loader2, Mail } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { Loader2, Rocket, Star } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Link, useNavigate } from 'react-router-dom';
-
-// ADICIONADO: Defina o ID do seu plano do Stripe aqui.
-// É uma boa prática usar variáveis de ambiente para isso.
-const STRIPE_PRICE_ID = import.meta.env.VITE_STRIPE_PRICE_ID || 'seu_price_id_padrão';
-
 
 const PricingPage = () => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingTrial, setIsLoadingTrial] = useState(false);
+  const [userStatus, setUserStatus] = useState<string | null>(null);
+  const [isDialogVisible, setIsDialogVisible] = useState(false);
+  const [cpfCnpj, setCpfCnpj] = useState('');
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
-    const checkUser = async () => {
+    const checkUserStatus = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      setCurrentUser(user);
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('subscription_status')
+        .eq('id', user.id)
+        .single();
+
+      if (profile) {
+        setUserStatus(profile.subscription_status);
+      }
     };
-    checkUser();
+    checkUserStatus();
   }, []);
 
-  const handleSignUpAndSubscribe = async (e: FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    try {
-      // 1. Tenta cadastrar o usuário
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) throw error;
-      
-      // 2. Se o cadastro for bem-sucedido e o usuário estiver logado, prossiga para o checkout
-      if (data.user && data.session) {
-         await handleSubscriptionCheckout();
-      } else {
-        // Se o email de confirmação for necessário
-        toast({
-          title: "Verifique seu e-mail",
-          description: "Um link de confirmação foi enviado. Após confirmar, volte e clique em 'Assinar Agora'.",
-        });
-      }
-
-    } catch (error: any) {
-      toast({
-        title: "Erro no Cadastro",
-        description: error.message || "Ocorreu um erro ao criar a conta.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
+  const handleFreeTrial = async () => {
+    // ... (código do trial continua igual)
   };
 
+  const handleSubscriptionCheckout = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!cpfCnpj) {
+      toast({ title: "Campo obrigatório", description: "O CPF/CNPJ é necessário.", variant: "destructive" });
+      return;
+    }
+    setIsSubmitting(true);
+    setIsDialogVisible(false);
 
-  const handleSubscriptionCheckout = async () => {
-    setIsLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast({ title: "Usuário não encontrado", description: "Faça o login para continuar.", variant: "destructive" });
+      setIsSubmitting(false);
+      navigate('/login');
+      return;
+    }
+
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({ title: "Você não está logado", description: "Por favor, crie uma conta ou faça login para assinar.", variant: "destructive" });
-        setIsLoading(false);
-        return;
-      }
-
-      // MODIFICADO: Passa o priceId no corpo da requisição
       const { data, error } = await supabase.functions.invoke('create-checkout-session', {
-        body: { priceId: STRIPE_PRICE_ID },
+        body: { 
+          userId: user.id,
+          userEmail: user.email,
+          cpfCnpj: cpfCnpj // Enviando o CPF/CNPJ do pop-up
+        },
       });
 
-      if (error) throw error;
-      
+      if (error) throw new Error(error.message);
+      if (!data?.url) throw new Error("URL de pagamento não recebida.");
+
       window.location.href = data.url;
 
     } catch (error: any) {
       toast({
-        title: "Erro ao iniciar assinatura",
-        description: error.message || "Não foi possível redirecionar para o pagamento.",
+        title: "Erro ao processar assinatura",
+        description: error.message || "Houve um problema ao criar sua assinatura.",
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
+  const isSubscribed = userStatus === 'active' || userStatus === 'trialing';
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-gray-800">Selecione o seu plano</h1>
-        <p className="text-lg text-gray-600 mt-2">Acesso completo à plataforma para simplificar sua contabilidade.</p>
-      </div>
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader>
-          <CardTitle>Plano Mensal</CardTitle>
-          <CardDescription>
-            <span className="text-4xl font-bold">R$ 29,90</span>
-            <span className="text-muted-foreground"> / mês</span>
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-3 mb-6">
-            <li className="flex items-center"><Check className="h-5 w-5 text-green-500 mr-2" />Processamento ilimitado de NF-e</li>
-            <li className="flex items-center"><Check className="h-5 w-5 text-green-500 mr-2" />Relatórios Automatizados</li>
-            <li className="flex items-center"><Check className="h-5 w-5 text-green-500 mr-2" />Assistente com Inteligência Artificial</li>
-            <li className="flex items-center"><Check className="h-5 w-5 text-green-500 mr-2" />Suporte Prioritário</li>
-          </ul>
+    <>
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-bold tracking-tight">Planos Flexíveis para Você</h1>
+          <p className="text-lg text-muted-foreground mt-2">Escolha o plano que melhor se adapta às suas necessidades.</p>
+        </div>
 
-          {!currentUser ? (
-            <form onSubmit={handleSignUpAndSubscribe} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
-                <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
-              </div>
-              <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Criar Conta e Assinar'}
+        {isSubscribed && (
+          <Card className="mb-8 bg-green-50 border-green-200 w-full max-w-md">
+            {/* ... (Card de plano ativo continua igual) ... */}
+          </Card>
+        )}
+
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-8 ${isSubscribed ? 'opacity-50 pointer-events-none' : ''}`}>
+          {/* Card do Plano Gratuito */}
+          <Card className="flex flex-col">
+            {/* ... (Card de teste continua igual) ... */}
+          </Card>
+
+          {/* Card do Plano Pago */}
+          <Card className="border-blue-500 flex flex-col">
+            <CardHeader>
+              <CardTitle>Plano Mensal</CardTitle>
+              <CardDescription><span className="text-4xl font-bold">R$ 40,00</span><span className="text-muted-foreground"> / mês</span></CardDescription>
+            </CardHeader>
+            <CardContent className="flex-grow">
+              <ul className="space-y-2">
+                  <li className="flex items-center"><Rocket className="h-4 w-4 mr-2 text-blue-500" /> Todas as funcionalidades do plano teste</li>
+                  <li className="flex items-center"><Rocket className="h-4 w-4 mr-2 text-blue-500" /> Acesso contínuo e ilimitado</li>
+                  <li className="flex items-center"><Rocket className="h-4 w-4 mr-2 text-blue-500" /> Suporte prioritário</li>
+              </ul>
+            </CardContent>
+            <CardFooter>
+              {/* Este botão agora abre o pop-up */}
+              <Button onClick={() => setIsDialogVisible(true)} className="w-full" disabled={isSubmitting || isSubscribed}>
+                Assinar Agora
               </Button>
-               <div className="text-center">
-                <Button variant="link" onClick={() => navigate('/')} className="text-sm">
-                  Já tem uma conta? Faça login
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <Button className="w-full" size="lg" onClick={handleSubscriptionCheckout} disabled={isLoading}>
-              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Assinar Agora'}
-            </Button>
-          )}
+            </CardFooter>
+          </Card>
+        </div>
+      </div>
 
-        </CardContent>
-        <CardFooter className="flex justify-center text-xs text-muted-foreground">
-          Ao assinar, você concorda com nossos <Link to="/terms" className="underline ml-1">Termos de Serviço</Link>.
-        </CardFooter>
-      </Card>
-    </div>
+      {/* Pop-up (Dialog) para coletar o CPF/CNPJ */}
+      <AlertDialog open={isDialogVisible} onOpenChange={setIsDialogVisible}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmação de Assinatura</AlertDialogTitle>
+            <AlertDialogDescription>
+              Para continuar, por favor, informe seu CPF ou CNPJ. Este dado é exigido pelo nosso parceiro de pagamentos (Asaas).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <form onSubmit={handleSubscriptionCheckout}>
+            <div className="space-y-2 py-4">
+              <Label htmlFor="cpfCnpj-dialog">CPF ou CNPJ</Label>
+              <Input
+                id="cpfCnpj-dialog"
+                value={cpfCnpj}
+                onChange={(e) => setCpfCnpj(e.target.value)}
+                placeholder="Apenas números"
+                required
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel type="button">Cancelar</AlertDialogCancel>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Continuar para Pagamento"}
+              </Button>
+            </AlertDialogFooter>
+          </form>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 

@@ -1,4 +1,4 @@
-// src/pages/Login.tsx
+// sistema/src/pages/Login.tsx
 import { FormEvent, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -7,14 +7,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { LogIn, Loader2 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom'; // Importe useNavigate
+import { Link, useNavigate } from 'react-router-dom';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const { toast } = useToast();
-  const navigate = useNavigate(); // Inicialize o hook de navegação
+  const navigate = useNavigate();
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -29,6 +29,9 @@ const LoginPage = () => {
         title: "Login realizado!",
         description: "Bem-vindo de volta ao sistema!",
       });
+
+      // O AuthWrapper cuidará do redirecionamento
+      // navigate('/dashboard');
 
     } catch (error: any) {
       toast({
@@ -65,7 +68,7 @@ const LoginPage = () => {
           </form>
           <div className="mt-4 text-center">
             <Button variant="link" asChild className="text-sm">
-              <Link to="/pricing">Não tem conta? Crie uma aqui</Link>
+              <Link to="/signup">Não tem conta? Crie uma aqui</Link>
             </Button>
           </div>
         </CardContent>
